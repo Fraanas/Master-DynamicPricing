@@ -41,7 +41,7 @@ def feature_importance_shap(model, env_eval, feature_cols, num_samples=200):
     
     # calculate SHAP values for our sample
     print("Calculating SHAP values (this may take a while)...")
-    shap_values = explainer.shap_values(X_sample)
+    shap_values = explainer.shap_values(X_sample, silent=True)
     
     # Plot the summary chart
     plt.figure()
