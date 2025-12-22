@@ -1,0 +1,11 @@
+pandas
+numpy
+Gymnasium
+keras
+keras-rl2
+tensorflow
+stable_baselines3
+scikit-learn
+stable-baselines3[extra]
+torch
+shap
