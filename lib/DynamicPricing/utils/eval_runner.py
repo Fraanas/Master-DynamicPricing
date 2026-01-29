@@ -50,6 +50,7 @@ def run_evaluation(env, model, output_dir: str = "./plots/") -> pd.DataFrame:
         pd.DataFrame: Aggregated results from all episodes.
     """
     # 1. Setup
+    env = env.envs[0]
     os.makedirs(output_dir, exist_ok=True)
     all_history = []
     

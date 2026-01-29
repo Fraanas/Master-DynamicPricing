@@ -25,6 +25,7 @@ class DynamicPricingEnv(Env):
         end_date: str,
         eval_start: str,
         eval_end: str,
+        # Demand and Reve parameters
         price_change_limit: float = 0.15,
         price_elasticity: float = -1.5,
         penalty: float = 0.02,
@@ -59,6 +60,14 @@ class DynamicPricingEnv(Env):
         self.episode_count = 0
         self.reset_count = 0
 
+        self.epsilon = 1e-6
+        self.elasticity_std = 0.15        # Elastisity noise 
+        self.min_price_ratio = 0.5  
+        self.max_price_ratio = 2.0       
+        self.max_demand_cap = 1.2         # Max  demand increase is (1.X) to +X% 
+
+        self.reward_scale = 10.0
+
         self.stochastic_elasticity = (mode == "train") if stochastic_elasticity is None else stochastic_elasticity
         self.random_start = (mode == "train") if random_start is None else random_start
 
@@ -79,6 +88,14 @@ class DynamicPricingEnv(Env):
             "sell_price_l_1",       
             "yhat_sold",
             "sold_l_1",
+            "dow_sin",
+            "dow_cos",
+            "week_of_year_sin",
+            "week_of_year_cos",
+            "revenue_ma_7",  
+            "revenue_ma_28",          
+            "sold_ma_7",          
+            "sold_ma_28",                  
             "price_change_l_1",
             "price_delta"
         ] + self.ohe_cols          
@@ -203,29 +220,41 @@ class DynamicPricingEnv(Env):
     
 
     def _calculate_demand(self, baseline_demand, price, prev_price): 
-        price_ref = max(prev_price, 1e-6)
+        price_ref = max(prev_price, self.epsilon)
+
         # Stochastic elasticity
         elasticity = self.price_elasticity
         if self.stochastic_elasticity:
-            elasticity *= self.rng.normal(1.0, 0.1) # Parametr: self.elasticity_std
+            elasticity *= self.rng.normal(1.0, self.elasticity_std) 
 
-        price_ratio = np.clip(price / price_ref, 0.7, 1.3) # Parametry min/max
-        
-        effective_demand = baseline_demand * (price_ratio ** elasticity)
-        effective_demand = min(effective_demand, 1.1 * baseline_demand)
+        price_ratio = np.clip(price / price_ref, self.min_price_ratio, self.max_price_ratio) 
+
+        calculated_demand = baseline_demand * (price_ratio ** elasticity) 
+        effective_demand = min(calculated_demand, self.max_demand_cap * baseline_demand)
         effective_demand = max(effective_demand, 0.0)
         
         return effective_demand
     
     def _calculate_reward(self, price, demand, prev_price):
-        revenue = price * demand
-        price_ref = max(prev_price, 1e-4)
+        agent_revenue = price * demand
+    
+        baseline_demand = self._calculate_demand(
+            baseline_demand=self.current_df.loc[self.current_step, "yhat_sold"],
+            price=prev_price,
+            prev_price=prev_price
+        )
+        baseline_revenue = prev_price * baseline_demand
         
+        diff = agent_revenue - baseline_revenue
+        weighted_reward = diff * self.current_weight
+
         # Penalty for instability
-        price_change_penalty = self.penalty * abs(price / price_ref - 1.0) * revenue
+        if self.penalty > 0:
+            change_magnitude = abs(price / max(prev_price, self.epsilon) - 1.0)
+            penalty_val = self.penalty * change_magnitude * baseline_revenue * self.current_weight
+            weighted_reward -= penalty_val
         
-        raw_reward = (revenue - price_change_penalty) * self.current_weight
-        return raw_reward / 1e4 # reward scaling
+        return weighted_reward / self.reward_scale
 
 
     def step(self, action):

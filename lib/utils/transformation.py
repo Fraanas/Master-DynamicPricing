@@ -1,6 +1,6 @@
 from sklearn.preprocessing import OneHotEncoder
 import pandas as pd
-
+import numpy as np
 
 def ts_data_split(
         df: pd.DataFrame,
@@ -49,8 +49,6 @@ def customer_segment_ohe(df, encoder, cat_cols):
     return df, cols
 
 
-import pandas as pd
-
 def add_lag_feature(
     df: pd.DataFrame,
     value_col: str,
@@ -72,7 +70,31 @@ def add_lag_feature(
     )
     return df
 
+def add_cyclic_date_features(df: pd.DataFrame, date_col: str = 'date'):
+    df = df.copy()
+    df[date_col] = pd.to_datetime(df[date_col])
+    dow = df[date_col].dt.dayofweek
 
+    df['dow_sin'] = np.sin(2 * np.pi * dow / 7.0)
+    df['dow_cos'] = np.cos(2 * np.pi * dow / 7.0)
+    woy = df[date_col].dt.isocalendar().week.astype(float)
+
+    period = 52.0
+    
+    df['week_of_year_sin'] = np.sin(2 * np.pi * woy / period)
+    df['week_of_year_cos'] = np.cos(2 * np.pi * woy / period)
+    
+    return df
+
+def add_moving_avg(df: pd.DataFrame, period: int, target_col):
+    col_name = f'{target_col}_ma_{period}'
+
+    def calculate_rolling(x):
+        return x.shift(1).rolling(window=period, min_periods=1).mean()
+
+    df[col_name] = df.groupby(['dept_id', 'customer_segment'])[target_col].transform(calculate_rolling)
+   
+    return df
 
 
 def transformation(
@@ -83,9 +105,13 @@ def transformation(
         eval_end:str
         ):
     df = add_lag_feature(df, 'sell_price', lag=1)
-    #df = add_lag_feature(df, 'sell_price', lag=365)
     df = add_lag_feature(df, 'sold', lag=1)
-
+    df = add_cyclic_date_features(df, date_col='date')
+    df = add_moving_avg(df, 7, 'sold')
+    df = add_moving_avg(df, 28, 'sold')
+    df = add_moving_avg(df, 7, 'revenue')
+    df = add_moving_avg(df, 28, 'revenue')
+    
     train, eval = ts_data_split(
         df, start_date, end_date, eval_start, eval_end
     )

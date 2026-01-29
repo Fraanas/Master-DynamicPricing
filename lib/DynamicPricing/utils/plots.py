@@ -141,6 +141,13 @@ def plot_market_metrics(agent_df: pd.DataFrame, base_df: pd.DataFrame):
     )
 
     # --- Row 2: PRICES ---
+    p1 = agent_df["price"]
+    p2 = base_df["sell_price"]
+    y_min = min(p1.min(), p2.min())
+    y_max = max(p1.max(), p2.max())
+
+    margin = (y_max - y_min) * 0.05
+    y_limits = (y_min - margin, y_max + margin)
     # Agent Strategy (Average price per product)
     _plot_price_strategy(
         ax=axs[2, 0],
@@ -150,6 +157,7 @@ def plot_market_metrics(agent_df: pd.DataFrame, base_df: pd.DataFrame):
         hue_col="product_id",
         title="Agent Strategy: Avg Price per Product"
     )
+    axs[2, 0].set_ylim(y_limits)
 
     # Baseline Strategy (Average price per product)
     _plot_price_strategy(
@@ -159,8 +167,9 @@ def plot_market_metrics(agent_df: pd.DataFrame, base_df: pd.DataFrame):
         y_col="sell_price",
         hue_col="dept_id",
         title="Baseline Strategy: Avg Price per Product",
-        dates_filter=common_dates # Crucial: use the same date range
+        dates_filter=common_dates 
     )
+    axs[2, 1].set_ylim(y_limits)
 
     plt.tight_layout()
     plt.show()
